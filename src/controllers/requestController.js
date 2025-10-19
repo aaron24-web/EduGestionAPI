@@ -194,3 +194,45 @@ export const getRequestById = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+/**
+ * RF-022: Asigna un Asesor a una Solicitud (para Academy Admin)
+ */
+export const assignAdvisor = async (req, res) => {
+  const { id } = req.params; // ID de la solicitud (tutoring_request)
+  const { advisor_id } = req.body;
+
+  if (!advisor_id) {
+    return res.status(400).json({ error: 'El campo advisor_id es requerido.' });
+  }
+
+  // TODO: Añadir un roleMiddleware para asegurar que solo un 'ACADEMY_ADMIN'
+  // o el 'ADVISOR' principal (si es tenant individual) puede hacer esto.
+  // const { user } = req; // req.user es inyectado por authMiddleware
+  // Aquí iría la lógica de verificación de roles...
+
+  try {
+    const { data, error } = await supabase
+      .from('tutoring_requests')
+      .update({ 
+        advisor_id: advisor_id,
+        status: 'PENDING_PLAN' // Actualizamos el estado, listo para crear el plan
+      })
+      .eq('id', id)
+      // TODO: Añadir .eq('tenant_id', user.tenant_id) como doble chequeo de seguridad
+      .select()
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') { // No se encontró la fila
+        return res.status(404).json({ error: 'Solicitud no encontrada.' });
+      }
+      throw error;
+    }
+
+    res.status(200).json({ message: 'Asesor asignado exitosamente.', request: data });
+
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};

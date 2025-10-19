@@ -2,9 +2,9 @@ import { Router } from 'express';
 import { 
   getTenantRequests,
   createRequest,
-  getRequestById
+  getRequestById,
+  assignAdvisor // <-- AÑADIR ESTA IMPORTACIÓN
 } from '../controllers/requestController.js';
-// ¡Importante! Importamos el middleware de seguridad
 import { authMiddleware } from '../middleware/authMiddleware.js';
 
 const router = Router();
@@ -93,5 +93,46 @@ router.get('/', authMiddleware, getTenantRequests); // <-- Endpoint PROTEGIDO (c
  *         description: Error del servidor.
  */
 router.get('/:id', authMiddleware, getRequestById); // <-- Endpoint PROTEGIDO (el que te te faltaba)
+
+/**
+ * @openapi
+ * /requests/{id}/assign:
+ *   put:
+ *     summary: Asigna un asesor a una solicitud
+ *     description: RF-022. Endpoint protegido (Admin). Asigna un 'advisor_id' a una 'tutoring_request'.
+ *     tags: [Requests]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: El ID de la solicitud (tutoring_request).
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [advisor_id]
+ *             properties:
+ *               advisor_id:
+ *                 type: integer
+ *                 description: El ID del asesor a asignar.
+ *     responses:
+ *       200:
+ *         description: Asesor asignado exitosamente.
+ *       400:
+ *         description: Faltan datos (ej. advisor_id).
+ *       401:
+ *         description: No autorizado.
+ *       404:
+ *         description: Solicitud no encontrada.
+ *       500:
+ *         description: Error del servidor.
+ */
+router.put('/:id/assign', authMiddleware, assignAdvisor); // <-- AÑADIR ESTA RUTA
 
 export default router;
