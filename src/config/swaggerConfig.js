@@ -6,7 +6,7 @@ const options = {
     info: {
       title: 'EduGestión API',
       version: '1.0.0',
-      description: 'API para la plataforma SaaS EduGestión (Modelo Consultivo) [cite: 3, 4, 84]',
+      description: 'API para la plataforma SaaS EduGestión (Modelo Consultivo)',
     },
     servers: [
       {
