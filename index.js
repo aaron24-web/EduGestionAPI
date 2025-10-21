@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import cors from 'cors';
 import swaggerUi from 'swagger-ui-express';
 import { swaggerSpec } from './src/config/swaggerConfig.js';
+// La única importación de rutas que debe estar aquí es la del router principal.
 import mainRouter from './src/routes/index.js';
 
 // Cargar variables de entorno
@@ -16,6 +17,7 @@ app.use(cors());
 app.use(express.json()); // Para parsear JSON
 
 // Ruta principal de la API
+// Aquí le decimos a Express que use el router que importamos.
 app.use('/api/v1', mainRouter);
 
 // Ruta de la documentación de Swagger
