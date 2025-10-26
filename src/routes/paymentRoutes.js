@@ -1,3 +1,4 @@
+import { Router } from 'express';
 import { registerPayment } from '../controllers/paymentController.js';
 import { authMiddleware } from '../middleware/authMiddleware.js';
 
