@@ -1,145 +1,147 @@
 import { supabase } from '../config/supabaseClient.js';
 
-/**
- * RF-027: Agendar una nueva clase para un plan activo.
- * Solo un asesor o admin puede agendar.
- */
+// --- FUNCIÓN scheduleClass (CORREGIDA) ---
 export const scheduleClass = async (req, res) => {
-  // El ID del usuario (asesor) viene del token JWT a través del middleware
-  const advisorUserId = req.user.id; 
-  const { plan_subject_id, student_id, start_time, end_time, title, description } = req.body;
+  const authUser = req.user; 
+  // 'title' SE HA ELIMINADO de los parámetros de entrada
+  const { plan_subject_id, start_time, end_time } = req.body;
 
-  if (!plan_subject_id || !student_id || !start_time || !end_time || !title) {
-    return res.status(400).json({ error: 'Faltan campos requeridos (plan_subject_id, student_id, start_time, end_time, title).' });
+  // 1. Validar campos
+  if (!plan_subject_id || !start_time || !end_time) {
+    return res.status(400).json({ error: 'Faltan campos requeridos (plan_subject_id, start_time, end_time).' });
   }
 
   try {
-    // 1. Validar que el usuario sea un asesor válido y obtener su ID de la tabla 'advisors'
-    const { data: advisor, error: advisorError } = await supabase
-      .from('advisors')
-      .select('id, tenant_id')
-      .eq('user_id', advisorUserId)
-      .single();
-
-    if (advisorError || !advisor) {
-      return res.status(403).json({ error: 'Acción no permitida. El usuario no es un asesor válido.' });
-    }
-
-    // 2. Obtener el plan_subject y verificar que el plan asociado esté ACTIVO
-    const { data: planSubject, error: planSubjectError } = await supabase
+    // 2. Obtener el plan subject, estado del enrollment, y cliente (Esta lógica ya está corregida)
+    const { data: planSubject, error: planError } = await supabase
       .from('plan_subjects')
       .select(`
-        id,
-        number_of_classes,
-        plans ( id, status, tenant_id, student_id )
+        advisor_id,
+        enrollments (
+          status,
+          tutoring_requests (
+            students (
+              client_id
+            )
+          )
+        )
       `)
       .eq('id', plan_subject_id)
       .single();
 
-    if (planSubjectError) throw planSubjectError;
+    if (planError) {
+      console.error('Error finding planSubject:', planError);
+      return res.status(404).json({ error: 'PlanSubject no encontrado.', details: planError.message });
+    }
 
-    if (!planSubject) {
-      return res.status(404).json({ error: 'La materia del plan especificada no existe.' });
+    // 3. Verificar que el enrollment esté ACTIVO (Esta lógica ya está corregida)
+    if (planSubject.enrollments.status !== 'ACTIVE') {
+      return res.status(400).json({ error: `El plan de enseñanza no está activo (estado actual: ${planSubject.enrollments.status}). No se pueden agendar clases.` });
+    }
+
+    // 4. Obtener perfil de 'public.users' (Esta lógica ya está corregida)
+    const { data: publicUser, error: publicUserError } = await supabase
+      .from('users')
+      .select('id, role')
+      .eq('email', authUser.email)
+      .single();
+    if (publicUserError) {
+      return res.status(404).json({ error: 'Perfil de usuario no encontrado en public.users.' });
     }
     
-    // 3. Validaciones de negocio críticas
-    if (planSubject.plans.status !== 'ACTIVE') {
-      return res.status(400).json({ error: 'No se puede agendar una clase para un plan que no está activo.' });
-    }
-    if (planSubject.plans.tenant_id !== advisor.tenant_id) {
-        return res.status(403).json({ error: 'No tienes permiso para agendar clases en este plan.' });
-    }
-    if (planSubject.plans.student_id !== student_id) {
-        return res.status(400).json({ error: 'El estudiante proporcionado no coincide con el estudiante del plan.' });
-    }
-
-    // 4. Contar clases existentes para no exceder el límite del plan
-    const { count, error: countError } = await supabase
-      .from('classes')
-      .select('*', { count: 'exact', head: true })
-      .eq('plan_subject_id', plan_subject_id);
-
-    if (countError) throw countError;
-
-    if (count >= planSubject.number_of_classes) {
-      return res.status(400).json({ error: 'Se ha alcanzado el número máximo de clases para esta materia del plan.' });
+    // 5. Validar permisos (Esta lógica ya está corregida)
+    const userRole = publicUser.role;
+    const publicUserId = publicUser.id; 
+    if (userRole === 'ADVISOR') { 
+        const { data: advisorData } = await supabase.from('advisors').select('id').eq('user_id', publicUserId).single();
+        if (!advisorData || advisorData.id !== planSubject.advisor_id) {
+            return res.status(403).json({ error: 'Acción no permitida. No eres el asesor asignado a esta materia.' });
+        }
+    } 
+    else if (userRole === 'CLIENT') { 
+        const clientId = planSubject.enrollments.tutoring_requests.students.client_id;
+        const { data: clientData } = await supabase.from('clients').select('user_id').eq('id', clientId).single();
+        if (clientData.user_id !== publicUserId) {
+            return res.status(403).json({ error: 'Acción no permitida. No eres el cliente dueño de este plan.' });
+        }
     }
 
-    // 5. Si todo es correcto, insertar la nueva clase en la base de datos
-    const { data: newClass, error: insertError } = await supabase
+    // 6. --- CORRECCIÓN DE INSERT ---
+    // 'title' SE HA ELIMINADO del objeto a insertar
+    const { data: newClass, error: classError } = await supabase
       .from('classes')
       .insert({
         plan_subject_id,
-        student_id,
-        advisor_id: advisor.id,
-        tenant_id: advisor.tenant_id,
         start_time,
         end_time,
-        title,
-        description,
-        status: 'SCHEDULED' // Estado inicial
+        status: 'SCHEDULED'
       })
       .select()
       .single();
 
-    if (insertError) throw insertError;
+    if (classError) throw classError;
 
-    res.status(201).json({ message: 'Clase agendada exitosamente.', class: newClass });
+    res.status(201).json(newClass);
 
   } catch (error) {
-    console.error('Error scheduling class:', error);
+    console.error('Error en scheduleClass:', error);
     res.status(500).json({ error: error.message });
   }
 };
 
-
-/**
- * RF-028: Obtiene el calendario de clases de un estudiante.
- * Devuelve todas las clases pasadas y futuras de un estudiante.
- */
+// --- FUNCIÓN getStudentCalendar (CORREGIDA) ---
 export const getStudentCalendar = async (req, res) => {
-    const { studentId } = req.params;
+  const { id } = req.params; // ID del estudiante (student_id)
+  const authUser = req.user; 
 
-    try {
-        // La consulta a 'classes' debería estar protegida por Políticas de Seguridad a Nivel de Fila (RLS) en Supabase.
-        // Esto asegura que un asesor solo pueda ver estudiantes de su propio tenant.
-        const { data: classes, error } = await supabase
-            .from('classes')
-            .select(`
-                id,
-                start_time,
-                end_time,
-                title,
-                description,
-                status,
-                plan_subjects (
-                    subjects ( name )
-                ),
-                advisors (
-                    users ( full_name )
-                )
-            `)
-            .eq('student_id', studentId)
-            .order('start_time', { ascending: true });
+  try {
+    // (Validación de permisos del usuario - esta parte está bien)
+    const { data: publicUser, error: publicUserError } = await supabase
+      .from('users').select('id, role').eq('email', authUser.email).single();
+    if (publicUserError) return res.status(404).json({ error: 'Perfil de usuario no encontrado en public.users.' });
+    
+    const userRole = publicUser.role;
+    const publicUserId = publicUser.id; 
 
-        if (error) throw error;
+    if (userRole === 'CLIENT') {
+      const { data: studentClient } = await supabase
+        .from('students')
+        .select('client_id')
+        .eq('id', id)
+        .single();
         
-        // Formatear la respuesta para que sea más fácil de usar en el frontend
-        const formattedClasses = classes.map(c => ({
-            id: c.id,
-            start_time: c.start_time,
-            end_time: c.end_time,
-            title: c.title,
-            description: c.description,
-            status: c.status,
-            subject: c.plan_subjects?.subjects?.name || 'N/A',
-            advisor: c.advisors?.users?.full_name || 'N/A'
-        }));
+      const { data: clientUser } = await supabase
+        .from('clients')
+        .select('user_id')
+        .eq('id', studentClient.client_id)
+        .single();
 
-        res.status(200).json(formattedClasses);
-
-    } catch (error) {
-        console.error('Error fetching student calendar:', error);
-        res.status(500).json({ error: error.message });
+      if (clientUser.user_id !== publicUserId) {
+         return res.status(403).json({ error: 'Acción no permitida. No puedes ver el calendario de un estudiante que no te pertenece.' });
+      }
     }
+    
+    // 4. --- CORRECCIÓN DE CONSULTA ---
+    // 'title' SE HA ELIMINADO del select
+    const { data: classes, error } = await supabase
+      .from('classes')
+      .select(`
+        id, start_time, end_time, status,
+        plan_subjects!inner (
+          enrollments!inner (
+            tutoring_requests!inner (
+              student_id
+            )
+          )
+        )
+      `)
+      .eq('plan_subjects.enrollments.tutoring_requests.student_id', id);
+
+    if (error) throw error;
+
+    res.status(200).json(classes);
+
+  } catch (error) { // <-- AQUÍ ESTABA EL ERROR (S{)
+    res.status(500).json({ error: error.message });
+  }
 };

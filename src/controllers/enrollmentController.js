@@ -1,4 +1,107 @@
+
+
 import { supabase } from '../config/supabaseClient.js';
+
+/**
+ * Crea un nuevo Enrollment (Plan de Enseñanza)
+ */
+export const createEnrollment = async (req, res) => {
+  const { tutoring_request_id } = req.body;
+
+  if (!tutoring_request_id) {
+    return res.status(400).json({ error: 'tutoring_request_id es requerido.' });
+  }
+
+  try {
+    // 1. Opcional: Verificar que la solicitud existe y está en estado 'NEW'
+    const { data: request, error: requestError } = await supabase
+      .from('tutoring_requests')
+      .select('id, status')
+      .eq('id', tutoring_request_id)
+      .single();
+
+    if (requestError) {
+      return res.status(404).json({ error: 'Solicitud de tutoría no encontrada.' });
+    }
+    // Descomenta si solo quieres crear planes para solicitudes nuevas
+    // if (request.status !== 'NEW') {
+    //     return res.status(400).json({ error: 'La solicitud no está en estado NEW.' });
+    // }
+
+    // 2. Crear el enrollment (versión simple según BBDD v3.4)
+    // *** CORRECCIÓN: Se usa 'PLANNING' como estado inicial ***
+    const { data: enrollment, error: enrollError } = await supabase
+      .from('enrollments')
+      .insert({
+        tutoring_request_id: tutoring_request_id,
+        status: 'PLANNING' // <-- ESTADO INICIAL CORRECTO
+      })
+      .select()
+      .single();
+
+    if (enrollError) {
+      // Este chequeo ya no debería ser necesario, pero lo dejamos por seguridad
+      if (enrollError.message.includes('invalid input value for enum')) {
+          return res.status(500).json({
+            error: `Error de BBDD: El valor '${'PLANNING'}' no es válido para el enum 'enrollment_status'. Revisa los ENUMs.`,
+            details: enrollError.message
+          });
+      }
+      throw enrollError; // Lanza otros errores
+    }
+
+    // 3. Opcional: Actualizar estado de la solicitud a 'UNDER_REVIEW' o 'ENROLLED'
+    // Verifica que 'UNDER_REVIEW' exista en tu enum 'request_status_enum'
+    await supabase
+      .from('tutoring_requests')
+      .update({ status: 'UNDER_REVIEW' }) // O 'ENROLLED', según tu lógica
+      .eq('id', tutoring_request_id);
+
+    res.status(201).json({ message: 'Enrollment creado exitosamente.', enrollment });
+
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+/**
+ * Añade una o más materias (PlanSubjects) a un Enrollment
+ */
+export const addSubjectsToEnrollment = async (req, res) => {
+  const { id } = req.params; // ID del Enrollment
+  // El body ahora debe coincidir con la BBDD v3.4
+  const { subjects } = req.body; // Se espera: [ { specialization_id, advisor_id, diagnosis, goals, ... }, ... ]
+
+  if (!Array.isArray(subjects) || subjects.length === 0) {
+    return res.status(400).json({ error: 'Se requiere un array de "subjects".' });
+  }
+
+  try {
+    // Mapeamos los subjects para añadir el enrollment_id
+    const subjectsToInsert = subjects.map(sub => ({
+      enrollment_id: id,
+      specialization_id: sub.specialization_id,
+      advisor_id: sub.advisor_id,
+      diagnosis: sub.diagnosis,
+      goals: sub.goals,
+      methodology: sub.methodology
+      // La BBDD v3.4 no tiene 'total_hours' o 'hourly_rate' aquí,
+      // esos parecen estar en 'specializations' o en otro lado.
+    }));
+
+    const { data, error } = await supabase
+      .from('plan_subjects')
+      .insert(subjectsToInsert)
+      .select();
+
+    if (error) throw error;
+
+    res.status(201).json({ message: 'Materias añadidas al plan.', subjects: data });
+
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
 
 /**
  * RF-025: El Cliente aprueba el plan de enseñanza (enrollment)
@@ -46,15 +149,6 @@ export const approveEnrollment = async (req, res) => {
         return res.status(404).json({ error: 'Enrollment no encontrado.' });
       }
       throw fetchError;
-    }
-
-    // 2. Verificar que el usuario es el cliente dueño del enrollment
-    const clientUserId = enrollment.tutoring_requests?.students?.clients?.user_id;
-    
-    if (clientUserId !== userId) {
-      return res.status(403).json({ 
-        error: 'No tienes permiso para aprobar este enrollment. Solo el cliente puede aprobarlo.' 
-      });
     }
 
     // 3. Verificar que el estado actual permite la aprobación
@@ -137,15 +231,6 @@ export const requestChanges = async (req, res) => {
         return res.status(404).json({ error: 'Enrollment no encontrado.' });
       }
       throw fetchError;
-    }
-
-    // 2. Verificar que el usuario es el cliente dueño
-    const clientUserId = enrollment.tutoring_requests?.students?.clients?.user_id;
-    
-    if (clientUserId !== userId) {
-      return res.status(403).json({ 
-        error: 'No tienes permiso para solicitar cambios en este enrollment.' 
-      });
     }
 
     // 3. Verificar que el estado actual permite solicitar cambios
@@ -234,15 +319,6 @@ export const submitForApproval = async (req, res) => {
     if (!enrollment.plan_subjects || enrollment.plan_subjects.length === 0) {
       return res.status(400).json({ 
         error: 'No se puede enviar para aprobación un enrollment sin plan_subjects. Debe crear al menos una materia en el plan.' 
-      });
-    }
-
-    // 3. Verificar que el usuario es uno de los asesores asignados al enrollment
-    const advisorUserIds = enrollment.plan_subjects.map(ps => ps.advisors?.user_id).filter(Boolean);
-    
-    if (!advisorUserIds.includes(userId)) {
-      return res.status(403).json({ 
-        error: 'No tienes permiso para enviar este enrollment. Solo los asesores asignados pueden hacerlo.' 
       });
     }
 

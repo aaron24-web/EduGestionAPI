@@ -1,11 +1,24 @@
+import { Router } from 'express';
+import { authMiddleware } from '../middleware/authMiddleware.js';
+import { roleMiddleware } from '../middleware/roleMiddleware.js'; // Importamos el middleware de roles
+import {
+  scheduleClass,
+  getStudentCalendar,
+  // (Añadiremos más funciones aquí después)
+} from '../controllers/classController.js';
+
+const router = Router();
+
+// Todas las rutas de clases están protegidas
+router.use(authMiddleware);
+
 /**
  * @openapi
  * /classes:
  *   post:
- *     summary: Agenda una nueva clase para un plan activo
- *     description: RF-027. Protegido para Asesores/Admins. Valida que el plan esté activo y no se exceda el número de clases.
- *     tags:
- *       - Classes
+ *     summary: Agenda una nueva clase
+ *     description: RF-028. Agenda una nueva sesión vinculada a un plan_subject_id.
+ *     tags: [Classes]
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -14,42 +27,58 @@
  *         application/json:
  *           schema:
  *             type: object
- *             required:
- *               - plan_subject_id
- *               - student_id
- *               - start_time
- *               - end_time
- *               - title
  *             properties:
  *               plan_subject_id:
  *                 type: integer
- *                 description: ID de la materia dentro del plan (tabla 'plan_subjects').
- *               student_id:
- *                 type: integer
- *                 description: ID del estudiante al que se le agenda la clase.
  *               start_time:
  *                 type: string
  *                 format: date-time
- *                 description: Fecha y hora de inicio de la clase (formato ISO 8601).
  *               end_time:
  *                 type: string
  *                 format: date-time
- *                 description: Fecha y hora de finalización de la clase (formato ISO 8601).
- *               title:
- *                 type: string
- *                 description: Título o tema principal de la clase.
- *               notes:
- *                 type: string
- *                 description: (Opcional) Descripción o notas adicionales.
  *     responses:
  *       '201':
- *         description: Clase agendada exitosamente.
+ *         description: Clase agendada exitosamente
  *       '400':
- *         description: Datos inválidos o violación de reglas de negocio (ej. plan no activo).
+ *         description: Error de validación (ej. plan no activo, horas insuficientes)
  *       '403':
- *         description: No autorizado (el usuario no es un asesor o no pertenece al tenant).
- *       '404':
- *         description: Recurso no encontrado (ej. plan_subject_id no existe).
- *       '500':
- *         description: Error del servidor.
+ *         description: Usuario no autorizado
  */
+// Solo el Cliente o un Asesor/Admin pueden agendar
+router.post(
+  '/',
+  roleMiddleware(['CLIENT', 'ADVISOR', 'ACADEMY_ADMIN']), 
+  scheduleClass
+);
+
+/**
+ * @openapi
+ * /classes/student/{id}:
+ *   get:
+ *     summary: Obtiene el calendario de un estudiante
+ *     description: Devuelve todas las clases (SCHEDULED, COMPLETED) para un estudiante específico.
+ *     tags: [Classes]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: El ID del estudiante (students.id)
+ *     responses:
+ *       '200':
+ *         description: Lista de clases del estudiante
+ *       '403':
+ *         description: Usuario no autorizado (no es el cliente dueño o un asesor del tenant)
+ *       '404':
+ *         description: Estudiante no encontrado
+ */
+// Todos los roles logueados pueden ver calendarios (RLS debería filtrar)
+router.get(
+  '/student/:id',
+  getStudentCalendar 
+);
+
+export default router;
