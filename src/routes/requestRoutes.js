@@ -14,7 +14,7 @@ const router = Router();
  * /requests:
  *   post:
  *     summary: Crea una nueva solicitud de asesoría (Formulario Público)
- *     description: RF-019. Endpoint público para que un cliente cree una solicitud, un estudiante y un cliente (si no existe).
+ *     description: RF-019. Endpoint público para que un cliente cree una solicitud, un estudiante y un cliente/usuario (si no existe).
  *     tags: [Requests]
  *     requestBody:
  *       required: true
@@ -22,14 +22,13 @@ const router = Router();
  *         application/json:
  *           schema:
  *             type: object
+ *             required: [tenant_id, client_name, client_email, student_name, student_school_grade_id]
  *             properties:
  *               tenant_id:
  *                 type: integer
  *               client_name:
  *                 type: string
  *               client_email:
- *                 type: string
- *               client_phone:
  *                 type: string
  *               student_name:
  *                 type: string
@@ -41,7 +40,7 @@ const router = Router();
  *       201:
  *         description: Solicitud creada exitosamente.
  *       400:
- *         description: Datos inválidos (ej. falta tenant_id).
+ *         description: Datos inválidos.
  *       500:
  *         description: Error del servidor.
  */

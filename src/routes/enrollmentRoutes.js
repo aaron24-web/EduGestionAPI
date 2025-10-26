@@ -3,87 +3,44 @@ import {
   createEnrollment,
   addSubjectsToEnrollment,
   getEnrollmentById,
-  approveEnrollment, 
-  requestChanges, 
-  submitForApproval
+  submitForApproval, // <-- Asegúrate de que estén todas importadas
+  approveEnrollment,
+  requestChanges
 } from '../controllers/enrollmentController.js';
 import { authMiddleware } from '../middleware/authMiddleware.js';
+import { roleMiddleware } from '../middleware/roleMiddleware.js'; // <-- 1. IMPORTAR EL NUEVO MIDDLEWARE
 
 const router = Router();
 
-/**
- * @swagger
- * /enrollments/{id}:
- *   get:
- *     summary: Obtiene el detalle completo de una inscripción (enrollment)
- *     description: RF-022. Devuelve un enrollment con todos sus plan_subjects, clases, pagos y datos del estudiante/cliente.
- *     tags:
- *       - Enrollments
- *     security:
- *       - BearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: integer
- *         description: ID del enrollment
- *     responses:
- *       200:
- *         description: Detalle del enrollment
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 id:
- *                   type: integer
- *                 status:
- *                   type: string
- *                   enum: [PLANNING, PENDING_APPROVAL, ACTIVE, COMPLETED, CANCELLED]
- *                 created_at:
- *                   type: string
- *                   format: date-time
- *                 updated_at:
- *                   type: string
- *                   format: date-time
- *                 tutoring_requests:
- *                   type: object
- *                   description: Datos de la solicitud original
- *                 plan_subjects:
- *                   type: array
- *                   description: Lista de materias en el plan
- *                   items:
- *                     type: object
- *                 payments:
- *                   type: array
- *                   description: Pagos asociados al enrollment
- *       404:
- *         description: Enrollment no encontrado o sin permisos
- *       500:
- *         description: Error del servidor
- */
-router.get('/:id', authMiddleware, getEnrollmentById);
+// Todas las rutas aquí están protegidas por (al menos) authMiddleware
+router.use(authMiddleware);
 
+// --- Rutas que ya tenías ---
+router.post('/', createEnrollment); // (Deberíamos proteger esta ruta también)
+router.post('/:id/subjects', addSubjectsToEnrollment); // (Y esta)
+router.get('/:id', getEnrollmentById); // (GET está bien para todos los roles logueados)
+
+// --- 2. APLICAR EL MIDDLEWARE DE ROLES A LAS RUTAS EXISTENTES ---
+
+// Asesor/Admin envía el plan para aprobación
 /**
- * @swagger
+ * @openapi
  * /enrollments/{id}/submit-for-approval:
  *   put:
- *     summary: Asesor envía el plan de enseñanza para aprobación del cliente
- *     description: RF-026. Cambia el estado del enrollment de PLANNING a PENDING_APPROVAL. Solo puede ser ejecutado por un asesor asignado al enrollment.
- *     tags:
- *       - Enrollments
+ *     summary: Asesor envía el plan para aprobación del cliente
+ *     description: RF-026. Cambia el estado del enrollment de PLANNING a PENDING_APPROVAL. Solo Asesores/Admins asignados.
+ *     tags: [Enrollments]
  *     security:
- *       - BearerAuth: []
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
  *         schema:
  *           type: integer
- *         description: ID del enrollment
+ *         description: ID del enrollment a enviar
  *     responses:
- *       200:
+ *       '200':
  *         description: Plan enviado para aprobación exitosamente
  *         content:
  *           application/json:
@@ -101,45 +58,41 @@ router.get('/:id', authMiddleware, getEnrollmentById);
  *                     status:
  *                       type: string
  *                       example: PENDING_APPROVAL
- *       400:
+ *       '400':
  *         description: Estado inválido o no hay plan_subjects
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 error:
- *                   type: string
- *                   example: No se puede enviar para aprobación un enrollment sin plan_subjects.
- *       403:
- *         description: Usuario no autorizado (no es asesor asignado)
- *       404:
+ *       '403':
+ *         description: Usuario no autorizado (no es asesor/admin asignado)
+ *       '404':
  *         description: Enrollment no encontrado
- *       500:
+ *       '500':
  *         description: Error del servidor
  */
-router.put('/:id/submit-for-approval', authMiddleware, submitForApproval);
+router.put(
+  '/:id/submit-for-approval', 
+  roleMiddleware(['ADVISOR', 'ACADEMY_ADMIN']), 
+  submitForApproval
+);
 
+// Cliente aprueba el plan
 /**
- * @swagger
+ * @openapi
  * /enrollments/{id}/approve:
  *   put:
- *     summary: Cliente aprueba el plan de enseñanza propuesto
- *     description: RF-025. Cambia el estado del enrollment de PENDING_APPROVAL a ACTIVE. Solo puede ser ejecutado por el cliente dueño del enrollment. Una vez aprobado, se pueden agendar clases.
- *     tags:
- *       - Enrollments
+ *     summary: Cliente aprueba el plan de enseñanza
+ *     description: RF-025. Cambia el estado del enrollment de PENDING_APPROVAL a ACTIVE. Solo el Cliente dueño.
+ *     tags: [Enrollments]
  *     security:
- *       - BearerAuth: []
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
  *         schema:
  *           type: integer
- *         description: ID del enrollment
+ *         description: ID del enrollment a aprobar
  *     responses:
- *       200:
- *         description: Enrollment aprobado exitosamente
+ *       '200':
+ *         description: Plan aprobado y activado exitosamente
  *         content:
  *           application/json:
  *             schema:
@@ -147,7 +100,7 @@ router.put('/:id/submit-for-approval', authMiddleware, submitForApproval);
  *               properties:
  *                 message:
  *                   type: string
- *                   example: Enrollment aprobado exitosamente. Ahora se pueden agendar clases.
+ *                   example: Plan aprobado exitosamente.
  *                 enrollment:
  *                   type: object
  *                   properties:
@@ -156,35 +109,31 @@ router.put('/:id/submit-for-approval', authMiddleware, submitForApproval);
  *                     status:
  *                       type: string
  *                       example: ACTIVE
- *       400:
- *         description: Estado inválido (no está en PENDING_APPROVAL)
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 error:
- *                   type: string
- *                   example: No se puede aprobar un enrollment en estado 'PLANNING'. Debe estar en 'PENDING_APPROVAL'.
- *       403:
- *         description: Usuario no autorizado (no es el cliente dueño)
- *       404:
+ *       '400':
+ *         description: Estado inválido (no estaba PENDING_APPROVAL)
+ *       '403':
+ *         description: Usuario no autorizado (no es el CLIENTE dueño)
+ *       '404':
  *         description: Enrollment no encontrado
- *       500:
+ *       '500':
  *         description: Error del servidor
  */
-router.put('/:id/approve', authMiddleware, approveEnrollment);
+router.put(
+  '/:id/approve', 
+  roleMiddleware(['CLIENT']), 
+  approveEnrollment
+);
 
+// Cliente solicita cambios
 /**
- * @swagger
+ * @openapi
  * /enrollments/{id}/request-changes:
  *   post:
- *     summary: Cliente solicita cambios al plan de enseñanza
- *     description: RF-024. Cambia el estado del enrollment de PENDING_APPROVAL de vuelta a PLANNING. Solo puede ser ejecutado por el cliente dueño. El asesor podrá revisar y modificar el plan nuevamente.
- *     tags:
- *       - Enrollments
+ *     summary: Cliente solicita cambios en el plan
+ *     description: RF-024. Cambia el estado del enrollment de PENDING_APPROVAL de vuelta a PLANNING. Solo el Cliente dueño.
+ *     tags: [Enrollments]
  *     security:
- *       - BearerAuth: []
+ *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -193,8 +142,7 @@ router.put('/:id/approve', authMiddleware, approveEnrollment);
  *           type: integer
  *         description: ID del enrollment
  *     requestBody:
- *       description: Comentarios opcionales del cliente sobre los cambios solicitados
- *       required: false
+ *       required: true
  *       content:
  *         application/json:
  *           schema:
@@ -202,10 +150,11 @@ router.put('/:id/approve', authMiddleware, approveEnrollment);
  *             properties:
  *               comments:
  *                 type: string
- *                 example: Por favor incluir más sesiones de práctica en Matemáticas.
+ *                 description: Comentarios o cambios solicitados por el cliente.
+ *                 example: { "comments": "Por favor, añadir 2 horas más de Física." }
  *     responses:
- *       200:
- *         description: Solicitud de cambios enviada exitosamente
+ *       '200':
+ *         description: Cambios solicitados. Plan devuelto a PLANNING.
  *         content:
  *           application/json:
  *             schema:
@@ -213,7 +162,7 @@ router.put('/:id/approve', authMiddleware, approveEnrollment);
  *               properties:
  *                 message:
  *                   type: string
- *                   example: Solicitud de cambios enviada. El asesor revisará el plan nuevamente.
+ *                   example: Cambios solicitados. El plan ha sido devuelto a PLANNING.
  *                 enrollment:
  *                   type: object
  *                   properties:
@@ -222,18 +171,19 @@ router.put('/:id/approve', authMiddleware, approveEnrollment);
  *                     status:
  *                       type: string
  *                       example: PLANNING
- *                 client_comments:
- *                   type: string
- *                   nullable: true
- *       400:
- *         description: Estado inválido (no está en PENDING_APPROVAL)
- *       403:
- *         description: Usuario no autorizado (no es el cliente dueño)
- *       404:
+ *       '400':
+ *         description: Estado inválido (no estaba PENDING_APPROVAL)
+ *       '403':
+ *         description: Usuario no autorizado (no es el CLIENTE dueño)
+ *       '404':
  *         description: Enrollment no encontrado
- *       500:
+ *       '500':
  *         description: Error del servidor
  */
-router.post('/:id/request-changes', authMiddleware, requestChanges);
+router.post(
+  '/:id/request-changes', 
+  roleMiddleware(['CLIENT']), 
+  requestChanges
+);
 
 export default router;

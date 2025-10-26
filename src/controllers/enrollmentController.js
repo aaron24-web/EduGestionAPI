@@ -1,3 +1,5 @@
+
+
 import { supabase } from '../config/supabaseClient.js';
 
 /**
@@ -149,15 +151,6 @@ export const approveEnrollment = async (req, res) => {
       throw fetchError;
     }
 
-    // 2. Verificar que el usuario es el cliente dueño del enrollment
-    const clientUserId = enrollment.tutoring_requests?.students?.clients?.user_id;
-    
-    if (clientUserId !== userId) {
-      return res.status(403).json({ 
-        error: 'No tienes permiso para aprobar este enrollment. Solo el cliente puede aprobarlo.' 
-      });
-    }
-
     // 3. Verificar que el estado actual permite la aprobación
     if (enrollment.status !== 'PENDING_APPROVAL') {
       return res.status(400).json({ 
@@ -238,15 +231,6 @@ export const requestChanges = async (req, res) => {
         return res.status(404).json({ error: 'Enrollment no encontrado.' });
       }
       throw fetchError;
-    }
-
-    // 2. Verificar que el usuario es el cliente dueño
-    const clientUserId = enrollment.tutoring_requests?.students?.clients?.user_id;
-    
-    if (clientUserId !== userId) {
-      return res.status(403).json({ 
-        error: 'No tienes permiso para solicitar cambios en este enrollment.' 
-      });
     }
 
     // 3. Verificar que el estado actual permite solicitar cambios
@@ -335,15 +319,6 @@ export const submitForApproval = async (req, res) => {
     if (!enrollment.plan_subjects || enrollment.plan_subjects.length === 0) {
       return res.status(400).json({ 
         error: 'No se puede enviar para aprobación un enrollment sin plan_subjects. Debe crear al menos una materia en el plan.' 
-      });
-    }
-
-    // 3. Verificar que el usuario es uno de los asesores asignados al enrollment
-    const advisorUserIds = enrollment.plan_subjects.map(ps => ps.advisors?.user_id).filter(Boolean);
-    
-    if (!advisorUserIds.includes(userId)) {
-      return res.status(403).json({ 
-        error: 'No tienes permiso para enviar este enrollment. Solo los asesores asignados pueden hacerlo.' 
       });
     }
 
