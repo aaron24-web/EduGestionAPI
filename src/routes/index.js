@@ -8,7 +8,8 @@ import classRoutes from './classRoutes.js';
 import progressReportRoutes from './progressReportRoutes.js';
 import supportRoutes from './supportRoutes.js';
 import specializationRoutes from './specializationRoutes.js';
-import availabilityRoutes from './availabilityRoutes.js'; // <-- 1. IMPORTAR
+import availabilityRoutes from './availabilityRoutes.js';
+import reviewRoutes from './reviewRoutes.js'; // <-- 1. IMPORTAR
 
 const router = Router();
 
@@ -21,6 +22,7 @@ router.use('/classes', classRoutes);
 router.use('/progress-reports', progressReportRoutes);
 router.use('/support', supportRoutes);
 router.use('/specializations', specializationRoutes);
-router.use('/availability', availabilityRoutes); // <-- 2. AÑADIR ESTA LÍNEA
+router.use('/availability', availabilityRoutes);
+router.use('/reviews', reviewRoutes); // <-- 2. AÑADIR ESTA LÍNEA
 
 export default router;
