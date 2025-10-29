@@ -9,16 +9,23 @@ export const registerUser = async (req, res) => {
     const { email, password, full_name, tenant_type } = req.body;
 
     // Validar que el tipo de tenant sea correcto
-    const validTenantTypes = ['INDIVIDUAL_ADVISOR', 'ACADEMY'];
+    const validTenantTypes = ['INDIVIDUAL_ADVISOR', 'ACADEMY', 'PARENT'];
     if (!tenant_type || !validTenantTypes.includes(tenant_type)) {
       return res.status(400).json({ 
-        error: 'Tipo de cuenta inválido. Debe ser INDIVIDUAL_ADVISOR o ACADEMY.' 
+        error: 'Tipo de cuenta inválido. Debe ser INDIVIDUAL_ADVISOR, ACADEMY o PARENT.' 
       });
     }
 
     // Mapear el rol del usuario según el tipo de tenant
     // RF-006, RF-011, Schema 
-    const role = tenant_type === 'ACADEMY' ? 'ACADEMY_ADMIN' : 'ADVISOR';
+    let role;
+    if (tenant_type === 'ACADEMY') {
+      role = 'ACADEMY_ADMIN';
+    } else if (tenant_type === 'INDIVIDUAL_ADVISOR') {
+      role = 'ADVISOR';
+    } else {
+      role = 'PARENT';
+    }
 
     // 1. Crear el usuario en Supabase Auth
     const { data: authData, error: authError } = await supabase.auth.signUp({

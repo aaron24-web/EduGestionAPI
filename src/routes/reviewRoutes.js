@@ -47,6 +47,6 @@ router.use(authMiddleware);
  *         description: Ya existe una reseña para ese enrollment
  */
 // Solo los Clientes pueden dejar reseñas
-router.post('/', roleMiddleware(['CLIENT']), createReview);
+router.post('/', roleMiddleware(['CLIENT', 'PARENT']), createReview);
 
 export default router;

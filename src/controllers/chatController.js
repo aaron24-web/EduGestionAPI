@@ -14,7 +14,7 @@ const getUserProfile = async (userEmail) => {
 
   let profile = { userId: user.id, role: user.role, clientId: null, advisorId: null };
 
-  if (user.role === 'CLIENT') {
+  if (user.role === 'CLIENT' || user.role === 'PARENT') {
     const { data: client, error: clientError } = await supabase
       .from('clients')
       .select('id')
@@ -44,7 +44,7 @@ export const getConversations = async (req, res) => {
     let query;
 
     // Construir la consulta según el rol
-    if (userProfile.role === 'CLIENT') {
+    if (userProfile.role === 'CLIENT' || userProfile.role === 'PARENT') {
       query = supabase
         .from('conversations')
         .select(`

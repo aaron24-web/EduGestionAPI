@@ -120,7 +120,7 @@ router.put(
  */
 router.put(
   '/:id/approve', 
-  roleMiddleware(['CLIENT']), 
+  roleMiddleware(['CLIENT', 'PARENT']), 
   approveEnrollment
 );
 
@@ -182,7 +182,7 @@ router.put(
  */
 router.post(
   '/:id/request-changes', 
-  roleMiddleware(['CLIENT']), 
+  roleMiddleware(['CLIENT', 'PARENT']), 
   requestChanges
 );
 

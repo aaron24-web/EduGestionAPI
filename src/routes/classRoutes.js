@@ -47,7 +47,7 @@ router.use(authMiddleware);
 // Solo el Cliente o un Asesor/Admin pueden agendar
 router.post(
   '/',
-  roleMiddleware(['CLIENT', 'ADVISOR', 'ACADEMY_ADMIN']), 
+  roleMiddleware(['CLIENT', 'ADVISOR', 'ACADEMY_ADMIN', 'PARENT']), 
   scheduleClass
 );
 

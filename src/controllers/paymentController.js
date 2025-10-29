@@ -1,5 +1,37 @@
 import { supabase } from '../config/supabaseClient.js';
 
+const getUserProfile = async (userEmail) => {
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('id, role')
+      .eq('email', userEmail)
+      .single();
+  
+    if (userError) throw new Error('Usuario no encontrado en public.users');
+  
+    let profile = { userId: user.id, role: user.role, clientId: null, advisorId: null };
+  
+    if (user.role === 'CLIENT' || user.role === 'PARENT') {
+      const { data: client, error: clientError } = await supabase
+        .from('clients')
+        .select('id')
+        .eq('user_id', user.id)
+        .single();
+      if (clientError) throw new Error('Perfil de cliente no encontrado.');
+      profile.clientId = client.id;
+    } else if (user.role === 'ADVISOR' || user.role === 'ACADEMY_ADMIN') {
+      const { data: advisor, error: advisorError } = await supabase
+        .from('advisors')
+        .select('id')
+        .eq('user_id', user.id)
+        .single();
+      if (advisorError) throw new Error('Perfil de asesor no encontrado.');
+      profile.advisorId = advisor.id;
+    }
+    
+    return profile;
+  };
+
 /**
  * Registra el pago de un cliente y activa el plan de inscripción (RF-035).
  */
@@ -9,6 +41,22 @@ export const registerPayment = async (req, res) => {
 
     if (!enrollment_id || !amount || !payment_method) {
       return res.status(400).json({ error: 'enrollment_id, amount, y payment_method son requeridos.' });
+    }
+
+    const userProfile = await getUserProfile(req.user.email);
+
+    const { data: enrollment, error: enrollmentErrorGet } = await supabase
+      .from('enrollments')
+      .select('client_id')
+      .eq('id', enrollment_id)
+      .single();
+
+    if (enrollmentErrorGet || !enrollment) {
+        return res.status(404).json({ error: 'Enrollment not found.' });
+    }
+
+    if (enrollment.client_id !== userProfile.clientId) {
+        return res.status(403).json({ error: 'You are not authorized to pay for this enrollment.' });
     }
 
     // 1. Registrar el pago en la tabla 'payments'

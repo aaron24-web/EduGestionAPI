@@ -8,7 +8,7 @@ const router = Router();
  * @openapi
  * /auth/register:
  *   post:
- *     summary: Registra un nuevo suscriptor (Asesor o Academia)
+ *     summary: Registra un nuevo suscriptor (Asesor, Academia o Padre)
  *     description: Corresponde a RF-006. Crea una nueva cuenta de suscriptor. El usuario recibirá un email de confirmación.
  *     tags: [Auth]
  *     requestBody:
@@ -29,10 +29,10 @@ const router = Router();
  *                 description: Contraseña (Supabase requiere 6+ caracteres).
  *               full_name:
  *                 type: string
- *                 description: Nombre completo del asesor o de la academia.
+ *                 description: Nombre completo del asesor, de la academia o del padre.
  *               tenant_type:
  *                 type: string
- *                 enum: [INDIVIDUAL_ADVISOR, ACADEMY]
+ *                 enum: [INDIVIDUAL_ADVISOR, ACADEMY, PARENT]
  *                 description: El tipo de cuenta a crear.
  *     responses:
  *       201:
